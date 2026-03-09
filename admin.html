@@ -208,7 +208,7 @@ document.getElementById('adminLoginLogo').src = LOGO_SRC;
 document.getElementById('adminPanelLogo').src = LOGO_SRC;
 
 // Admin credentials (hardcoded — change as needed)
-const ADMIN_CREDS = { username: 'admin', password: 'ebudget2026' };
+let ADMIN_CREDS = { username: '', password: '' };
 
 let currentTab = 'pending';
 
@@ -220,31 +220,32 @@ function showAdminPage(id) {
 }
 
 async function doAdminLogin() {
-  const u      = document.getElementById('adminUser').value.trim();
-  const p      = document.getElementById('adminPass').value;
-  const errEl  = document.getElementById('adminLoginErr');
-  const btn    = document.querySelector('#pageAdminLogin .auth-btn');
+  const u = document.getElementById('adminUser').value.trim();
+  const p = document.getElementById('adminPass').value;
+  const errEl = document.getElementById('adminLoginErr');
   errEl.style.display = 'none';
-  ADMIN_CREDS  = { username: u, password: p };
-  btn.textContent = 'Signing in...'; btn.disabled = true;
-
-  try {
-    const users = await getUsers();
-    if (Array.isArray(users)) {
+  ADMIN_CREDS.username = u;
+  ADMIN_CREDS.password = p;
+  const users = await getUsers();
+  if (Array.isArray(users) && users !== null) {
+    // verify by checking the request succeeded (getUsers returns [] on bad creds too, so we check via a flag)
+    const res = await fetch(API + '/admin/users', { headers: { 'Content-Type': 'application/json', 'admin-username': u, 'admin-password': p } });
+    if (res.ok) {
       sessionStorage.setItem('ebudget_admin', '1');
       sessionStorage.setItem('ebudget_admin_creds', JSON.stringify({ username: u, password: p }));
       showAdminPage('pageAdminPanel');
-      renderStats(users);
-      renderTable(users);
+      const data = await res.json();
+      renderStats(data);
+      renderTable(data);
     } else {
+      ADMIN_CREDS.username = ''; ADMIN_CREDS.password = '';
       errEl.style.display = 'block';
-      errEl.textContent   = 'Invalid admin credentials.';
+      errEl.textContent = 'Invalid admin credentials.';
     }
-  } catch(e) {
+  } else {
+    ADMIN_CREDS.username = ''; ADMIN_CREDS.password = '';
     errEl.style.display = 'block';
-    errEl.textContent   = 'Connection error. Is the server running?';
-  } finally {
-    btn.textContent = 'Sign In to Admin'; btn.disabled = false;
+    errEl.textContent = 'Invalid admin credentials.';
   }
 }
 
@@ -253,44 +254,22 @@ document.getElementById('adminPass').addEventListener('keydown', e => { if (e.ke
 function doAdminLogout() {
   sessionStorage.removeItem('ebudget_admin');
   sessionStorage.removeItem('ebudget_admin_creds');
-  ADMIN_CREDS = { username: '', password: '' };
+  ADMIN_CREDS.username = ''; ADMIN_CREDS.password = '';
   showAdminPage('pageAdminLogin');
   document.getElementById('adminUser').value = '';
   document.getElementById('adminPass').value = '';
 }
 
-// ── API ────────────────────────────────────────────────────
 const API = 'https://ebudget-tlg8.onrender.com';
-
-let ADMIN_CREDS = { username: '', password: '' };
-
-async function apiCall(path, options = {}) {
-  const res = await fetch(API + path, {
-    headers: {
-      'Content-Type': 'application/json',
-      'admin-username': ADMIN_CREDS.username,
-      'admin-password': ADMIN_CREDS.password,
-      ...(options.headers || {})
-    },
-    ...options
-  });
-  const data = await res.json();
-  return { ok: res.ok, status: res.status, data };
-}
-
 async function getUsers() {
-  const { ok, data } = await apiCall('/admin/users');
-  return ok ? data : [];
+  const res = await fetch(API + '/admin/users', { headers: { 'Content-Type': 'application/json', 'admin-username': ADMIN_CREDS.username, 'admin-password': ADMIN_CREDS.password } });
+  const data = await res.json();
+  return res.ok ? data : [];
 }
 
-async function refreshData() {
-  const users = await getUsers();
-  renderStats(users);
-  renderTable(users);
-}
+async function refreshData() { const users = await getUsers(); renderStats(users); renderTable(users); }
 
-function renderStats() {
-  const users = getUsers();
+function renderStats(users) {
   document.getElementById('statTotal').textContent = users.length;
   document.getElementById('statPending').textContent = users.filter(u => u.status === 'pending').length;
   document.getElementById('statApproved').textContent = users.filter(u => u.status === 'approved').length;
@@ -307,8 +286,8 @@ function switchTab(tab) {
   refreshData();
 }
 
-function renderTable() {
-  const users = getUsers();
+function renderTable(users) {
+  users = users || [];
   const q = document.getElementById('searchBox').value.toLowerCase();
   let filtered = users.filter(u => {
     if (currentTab === 'pending') return u.status === 'pending';
@@ -353,32 +332,25 @@ function renderTable() {
   });
 }
 
-function approveUser(id) {
-  const users = getUsers();
-  const u = users.find(x => x.id === id);
-  if (!u) return;
-  u.status = 'approved';
-  saveUsers(users);
-  showAdminToast(` ${u.name} approved!`);
-  refreshData();
+async function approveUser(id) {
+  const res = await fetch(API + '/admin/approve/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'admin-username': ADMIN_CREDS.username, 'admin-password': ADMIN_CREDS.password } });
+  const data = await res.json();
+  if (res.ok) { showAdminToast(' ' + data.user.name + ' approved!'); refreshData(); }
+  else showAdminToast('Failed.', 'error');
 }
 
-function rejectUser(id) {
-  const users = getUsers();
-  const u = users.find(x => x.id === id);
-  if (!u) return;
-  u.status = 'rejected';
-  saveUsers(users);
-  showAdminToast(`${u.name} rejected.`, 'error');
-  refreshData();
+async function rejectUser(id) {
+  const res = await fetch(API + '/admin/reject/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'admin-username': ADMIN_CREDS.username, 'admin-password': ADMIN_CREDS.password } });
+  const data = await res.json();
+  if (res.ok) { showAdminToast(data.user.name + ' rejected.', 'error'); refreshData(); }
+  else showAdminToast('Failed.', 'error');
 }
 
-function deleteUser(id) {
+async function deleteUser(id) {
   if (!confirm('Delete this user permanently?')) return;
-  const users = getUsers().filter(u => u.id !== id);
-  saveUsers(users);
-  showAdminToast('User deleted.', 'error');
-  refreshData();
+  const res = await fetch(API + '/admin/user/' + id, { method: 'DELETE', headers: { 'Content-Type': 'application/json', 'admin-username': ADMIN_CREDS.username, 'admin-password': ADMIN_CREDS.password } });
+  if (res.ok) { showAdminToast('User deleted.', 'error'); refreshData(); }
+  else showAdminToast('Failed.', 'error');
 }
 
 
@@ -402,14 +374,10 @@ function esc(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&
   const saved = sessionStorage.getItem('ebudget_admin_creds');
   if (sessionStorage.getItem('ebudget_admin') === '1' && saved) {
     const creds = JSON.parse(saved);
-    ADMIN_CREDS = creds;
-    const users = await getUsers().catch(() => null);
-    if (Array.isArray(users)) {
-      showAdminPage('pageAdminPanel');
-      renderStats(users);
-      renderTable(users);
-      return;
-    }
+    ADMIN_CREDS.username = creds.username;
+    ADMIN_CREDS.password = creds.password;
+    const res = await fetch(API + '/admin/users', { headers: { 'Content-Type': 'application/json', 'admin-username': creds.username, 'admin-password': creds.password } });
+    if (res.ok) { const users = await res.json(); showAdminPage('pageAdminPanel'); renderStats(users); renderTable(users); return; }
   }
   showAdminPage('pageAdminLogin');
 })();
