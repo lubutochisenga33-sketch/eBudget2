@@ -448,21 +448,13 @@ document.getElementById('appLogoHeader').src = LOGO_SRC;
 // ============================================================
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-// ── API ────────────────────────────────────────────────────
 const API = 'https://ebudget-tlg8.onrender.com';
-
-async function apiCall(path, options = {}) {
-  const res = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options
-  });
-  const data = await res.json();
-  return { ok: res.ok, status: res.status, data };
+async function apiCall(path, opts = {}) {
+  const { headers: h, ...rest } = opts;
+  const res = await fetch(API + path, { ...rest, headers: { 'Content-Type': 'application/json', ...(h||{}) } });
+  return { ok: res.ok, data: await res.json() };
 }
-
-function getCurrentUser() {
-  try { return JSON.parse(sessionStorage.getItem('ebudget_current') || 'null'); } catch(e) { return null; }
-}
+function getCurrentUser() { try { return JSON.parse(sessionStorage.getItem('ebudget_current') || 'null'); } catch(e) { return null; } }
 function setCurrentUser(u) { sessionStorage.setItem('ebudget_current', JSON.stringify(u)); }
 
 function showPage(id) {
@@ -474,68 +466,60 @@ function showPage(id) {
 
 async function doLogin() {
   const email = document.getElementById('loginEmail').value.trim().toLowerCase();
-  const pass  = document.getElementById('loginPassword').value;
+  const pass = document.getElementById('loginPassword').value;
   const errEl = document.getElementById('loginErr');
-  const btn   = document.querySelector('#pageLogin .auth-btn');
+  const btn = document.querySelector('#pageLogin .auth-btn');
   errEl.style.display = 'none';
-  btn.textContent = 'Signing in...'; btn.disabled = true;
-
+  btn.disabled = true; btn.textContent = 'Signing in...';
   try {
-    const { ok, data } = await apiCall('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password: pass })
-    });
+    const { ok, data } = await apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password: pass }) });
     if (!ok) {
-      if (data.error === 'expired')  { showPage('pageExpired');  return; }
-      if (data.error === 'pending')  { errEl.style.display = 'block'; errEl.textContent = 'Your account is pending admin approval.'; return; }
-      if (data.error === 'rejected') { errEl.style.display = 'block'; errEl.textContent = 'Your account has been rejected. Contact admin.'; return; }
+      if (data.error === 'expired') { showPage('pageExpired'); return; }
       errEl.style.display = 'block'; errEl.textContent = data.error || 'Invalid email or password.'; return;
     }
     setCurrentUser(data.user);
-    await loadUserData(data.user);
+    _budgets = data.budgets || {};
+    entries = data.entries || [];
+    document.getElementById('headerUserName').textContent = data.user.name;
+    initSelectors(); loadBudget(); render();
     showPage('pageApp');
   } catch(e) {
-    errEl.style.display = 'block'; errEl.textContent = 'Connection error. Please try again.';
+    errEl.style.display = 'block'; errEl.textContent = 'Invalid email or password.';
   } finally {
-    btn.textContent = 'Sign In'; btn.disabled = false;
+    btn.disabled = false; btn.textContent = 'Sign In';
   }
 }
 
 async function doRegister() {
-  const name  = document.getElementById('regName').value.trim();
+  const name = document.getElementById('regName').value.trim();
   const email = document.getElementById('regEmail').value.trim().toLowerCase();
   const phone = document.getElementById('regPhone').value.trim();
-  const pass  = document.getElementById('regPassword').value;
+  const pass = document.getElementById('regPassword').value;
   const errEl = document.getElementById('regErr');
-  const btn   = document.querySelector('#pageRegister .auth-btn');
+  const btn = document.querySelector('#pageRegister .auth-btn');
   errEl.style.display = 'none';
 
   if (!name || !email || !phone || !pass) { errEl.style.display = 'block'; errEl.textContent = 'All fields are required.'; return; }
   if (pass.length < 6) { errEl.style.display = 'block'; errEl.textContent = 'Password must be at least 6 characters.'; return; }
   if (!/\S+@\S+\.\S+/.test(email)) { errEl.style.display = 'block'; errEl.textContent = 'Please enter a valid email.'; return; }
 
-  btn.textContent = 'Creating account...'; btn.disabled = true;
+  btn.disabled = true; btn.textContent = 'Creating account...';
   try {
-    const { ok, data } = await apiCall('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ name, email, phone, password: pass })
-    });
+    const { ok, data } = await apiCall('/auth/register', { method: 'POST', body: JSON.stringify({ name, email, phone, password: pass }) });
     if (!ok) { errEl.style.display = 'block'; errEl.textContent = data.error || 'Registration failed.'; return; }
     showPage('pagePending');
   } catch(e) {
-    errEl.style.display = 'block'; errEl.textContent = 'Connection error. Please try again.';
+    errEl.style.display = 'block'; errEl.textContent = 'Registration failed. Please try again.';
   } finally {
-    btn.textContent = 'Create Account'; btn.disabled = false;
+    btn.disabled = false; btn.textContent = 'Create Account';
   }
 }
 
 function doLogout() {
   sessionStorage.removeItem('ebudget_current');
   entries = [];
-  _remoteBudgets = {};
-  budgetAmount   = 0;
   showPage('pageLogin');
-  document.getElementById('loginEmail').value    = '';
+  document.getElementById('loginEmail').value = '';
   document.getElementById('loginPassword').value = '';
 }
 
@@ -546,25 +530,20 @@ let entries = [];
 let editIdx = null;
 const today = new Date();
 
-function loadUserData(user) {
-  const users = getUsers();
-  const u = users.find(x => x.id === user.id);
-  entries = u ? (u.entries || []) : [];
+async function loadUserData(user) {
+  try {
+    const { ok, data } = await apiCall('/entries/' + user.id);
+    entries = ok ? (data.entries || []) : [];
+    _budgets = ok ? (data.budgets || {}) : {};
+  } catch(e) { entries = []; _budgets = {}; }
   document.getElementById('headerUserName').textContent = user.name;
-  initSelectors();
-  loadBudget();
-  render();
+  initSelectors(); loadBudget(); render();
 }
 
 async function saveUserData() {
   const cur = getCurrentUser();
   if (!cur) return;
-  try {
-    await apiCall('/entries/' + cur.id, {
-      method: 'PUT',
-      body: JSON.stringify({ entries, budgets: _remoteBudgets || {} })
-    });
-  } catch(e) { console.warn('Save failed:', e); }
+  try { await apiCall('/entries/' + cur.id, { method: 'PUT', body: JSON.stringify({ entries, budgets: _budgets || {} }) }); } catch(e) {}
 }
 
 function initSelectors() {
@@ -683,21 +662,20 @@ function normalizeWeightToKg(val, unit) {
 
 
 let budgetAmount = 0;
-let _remoteBudgets = {};
+let _budgets = {};
 
 function saveBudget() {
   const val = parseFloat(document.getElementById('budgetInput').value) || 0;
   budgetAmount = val;
   const { month, year } = getSelected();
-  if (!_remoteBudgets) _remoteBudgets = {};
-  _remoteBudgets[month + '_' + year] = val;
+  _budgets[month + '_' + year] = val;
   saveUserData();
   renderBudget();
 }
 
 function loadBudget() {
   const { month, year } = getSelected();
-  const val = (_remoteBudgets && _remoteBudgets[month + '_' + year]) || 0;
+  const val = (_budgets && _budgets[month + '_' + year]) || 0;
   budgetAmount = val;
   document.getElementById('budgetInput').value = val > 0 ? val : '';
 }
@@ -895,20 +873,16 @@ function generatePDF() {
 (async function init() {
   const cur = getCurrentUser();
   if (cur) {
-    // Verify session is still valid by loading entries from server
     try {
       const { ok, data } = await apiCall('/entries/' + cur.id);
       if (ok) {
-        entries        = data.entries || [];
-        _remoteBudgets = data.budgets || {};
+        entries = data.entries || [];
+        _budgets = data.budgets || {};
         document.getElementById('headerUserName').textContent = cur.name;
-        initSelectors();
-        loadBudget();
-        render();
-        showPage('pageApp');
-        return;
+        initSelectors(); loadBudget(); render();
+        showPage('pageApp'); return;
       }
-    } catch(e) { /* fall through */ }
+    } catch(e) {}
   }
   showPage('pageLogin');
 })();
