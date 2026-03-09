@@ -1,0 +1,12 @@
+{
+  "name": "eBudget",
+  "short_name": "eBudget",
+  "start_url": "./eBudget.html",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#F97316",
+  "icons": [
+    { "src": "Screenshot 2026-02-26 233349.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "Screenshot 2026-02-26 233349.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

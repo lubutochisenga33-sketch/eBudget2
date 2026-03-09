@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>eBudget – Grocery Budget Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, 'Arial Black', sans-serif; background: #FFF7ED; min-height: 100vh; }
+
+  /* ===== AUTH PAGES ===== */
+  .auth-page {
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+    padding: 20px;
+  }
+  .auth-logo-wrap { display: flex; flex-direction: column; align-items: center; margin-bottom: 28px; }
+  .auth-logo-wrap img { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; box-shadow: 0 4px 18px #F9731660; border: 3px solid #F97316; }
+  .auth-brand { font-family: Arial Black, Arial, sans-serif; font-size: 2.2rem; font-weight: 900; color: #EA580C; margin-top: 10px; letter-spacing: -1px; }
+  .auth-tagline { font-size: 0.8rem; color: #F97316; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px; }
+  .auth-card {
+    background: white; border-radius: 24px; padding: 32px 30px 26px;
+    box-shadow: 0 8px 40px #F9731622; border: 2px solid #FED7AA;
+    width: 100%; max-width: 420px;
+  }
+  .auth-title { font-family: Arial Black, Arial, sans-serif; font-size: 1.35rem; font-weight: 900; color: #1C1C1C; margin-bottom: 6px; }
+  .auth-sub { font-size: 0.83rem; color: #9A3412; font-weight: 600; margin-bottom: 22px; }
+  .auth-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+  .auth-field label { font-size: 0.72rem; font-weight: 700; color: #9A3412; letter-spacing: 0.5px; text-transform: uppercase; }
+  .auth-field input {
+    border: 2px solid #FED7AA; border-radius: 10px;
+    padding: 11px 14px; font-family: Arial, sans-serif; font-size: 0.95rem;
+    color: #1C1C1C; outline: none; transition: border 0.2s; background: #FFF7ED;
+  }
+  .auth-field input:focus { border-color: #F97316; background: white; }
+  .auth-field input.err { border-color: #EF4444; }
+  .auth-err { font-size: 0.72rem; color: #EF4444; font-weight: 700; margin-top: 2px; }
+  .auth-btn {
+    width: 100%; background: linear-gradient(135deg, #F97316, #EA580C);
+    color: white; border: none; border-radius: 12px; padding: 13px;
+    font-family: Arial Black, Arial, sans-serif; font-weight: 900; font-size: 1rem;
+    cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 14px #F9731640;
+    margin-top: 6px;
+  }
+  .auth-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px #F9731660; }
+  .auth-switch { text-align: center; margin-top: 18px; font-size: 0.85rem; color: #9A3412; font-weight: 600; }
+  .auth-switch a { color: #F97316; font-weight: 700; cursor: pointer; text-decoration: none; }
+  .auth-switch a:hover { text-decoration: underline; }
+  .pending-box {
+    background: #FFF7ED; border: 2px solid #FED7AA; border-radius: 16px;
+    padding: 24px; text-align: center; margin-top: 10px;
+  }
+  .pending-icon { font-size: 2.5rem; margin-bottom: 10px; }
+  .pending-title { font-family: Arial Black, Arial, sans-serif; font-weight: 900; font-size: 1.1rem; color: #EA580C; margin-bottom: 8px; }
+  .pending-text { font-size: 0.88rem; color: #9A3412; font-weight: 600; line-height: 1.5; }
+  .auth-global-err { background: #FEE2E2; border: 1.5px solid #EF4444; border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; color: #B91C1C; font-weight: 700; margin-bottom: 14px; display: none; }
+
+  /* ===== MAIN APP ===== */
+  .app-page { display: none; }
+  .header {
+    background: linear-gradient(135deg, #F97316 0%, #EA580C 60%, #FBBF24 100%);
+    padding: 14px 24px 18px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 4px 24px #F9731640;
+  }
+  .header img.hdr-logo { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.5); }
+  .header-title { font-family: Arial Black, Arial, sans-serif; font-size: 1.8rem; font-weight: 900; color: white; letter-spacing: -1px; }
+  .header-sub { color: #FEDDBB; font-size: 0.72rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .month-select {
+    background: rgba(255,255,255,0.18); border: 2px solid rgba(255,255,255,0.35);
+    color: white; font-family: Arial, sans-serif; font-weight: 700; font-size: 0.88rem;
+    border-radius: 10px; padding: 5px 10px; cursor: pointer; outline: none;
+  }
+  .month-select option { color: #333; background: white; }
+  .user-badge {
+    background: rgba(255,255,255,0.22); border: 2px solid rgba(255,255,255,0.4);
+    border-radius: 10px; padding: 5px 12px; color: white;
+    font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;
+  }
+  .btn-logout {
+    background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.35);
+    color: white; border-radius: 10px; padding: 5px 12px; cursor: pointer;
+    font-family: Arial, sans-serif; font-weight: 700; font-size: 0.83rem;
+    transition: background 0.2s;
+  }
+  .btn-logout:hover { background: rgba(0,0,0,0.15); }
+
+  .container { max-width: 940px; margin: 0 auto; padding: 24px 16px 60px; }
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 22px; }
+  .stat-card {
+    background: white; border-radius: 16px; padding: 16px 16px 12px;
+    box-shadow: 0 2px 12px #F9731618; border-top: 4px solid #F97316;
+  }
+  .stat-label { font-size: 0.7rem; font-weight: 700; color: #F97316; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+  .stat-value { font-family: Arial Black, Arial, sans-serif; font-size: 1.5rem; font-weight: 900; color: #1C1C1C; }
+
+  .form-card {
+    background: white; border-radius: 20px; padding: 20px 20px 16px;
+    box-shadow: 0 2px 18px #F9731614; margin-bottom: 22px; border: 2px solid #FED7AA;
+  }
+  .form-title { font-family: Arial Black, Arial, sans-serif; font-size: 1rem; font-weight: 900; color: #EA580C; margin-bottom: 14px; }
+  .form-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; gap: 10px; align-items: end; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 0.7rem; font-weight: 700; color: #9A3412; letter-spacing: 0.5px; text-transform: uppercase; }
+  .field input, .field select {
+    border: 2px solid #FED7AA; border-radius: 10px;
+    padding: 9px 12px; font-family: Arial, sans-serif; font-size: 0.92rem;
+    color: #1C1C1C; outline: none; transition: border 0.2s; background: #FFF7ED; width: 100%;
+  }
+  .field input:focus, .field select:focus { border-color: #F97316; background: white; }
+  .field input.err { border-color: #EF4444; }
+  .err-msg { font-size: 0.7rem; color: #EF4444; font-weight: 700; }
+  .weight-row { display: flex; gap: 6px; }
+  .weight-row input { flex: 1; }
+  .weight-row select { width: 64px; flex-shrink: 0; }
+  .btn-add {
+    background: linear-gradient(135deg, #F97316, #EA580C); color: white; border: none; border-radius: 10px; padding: 11px 20px;
+    font-family: Arial Black, Arial, sans-serif; font-weight: 900; font-size: 0.92rem;
+    cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 12px #F9731640; white-space: nowrap; align-self: end;
+  }
+  .btn-add:hover { transform: translateY(-2px); box-shadow: 0 6px 18px #F9731660; }
+  .btn-add.edit-mode { background: linear-gradient(135deg, #FBBF24, #F59E0B); }
+
+  .table-card { background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 2px 18px #F9731614; margin-bottom: 22px; }
+  .table-scroll { overflow-x: auto; }
+  .tbl { width: 100%; border-collapse: collapse; min-width: 680px; }
+  .tbl thead tr { background: linear-gradient(90deg, #F97316, #FBBF24); }
+  .tbl thead th { padding: 12px 14px; text-align: left; font-size: 0.72rem; font-weight: 700; color: white; letter-spacing: 0.8px; text-transform: uppercase; }
+  .tbl tbody tr { border-bottom: 1px solid #FFF7ED; transition: background 0.15s; }
+  .tbl tbody tr:hover { background: #FFF7ED; }
+  .tbl tbody td { padding: 11px 14px; font-size: 0.9rem; color: #333; font-weight: 600; }
+  .tbl tbody td.name { font-weight: 700; color: #1C1C1C; }
+  .tbl tbody td.price { color: #F97316; font-weight: 700; }
+  .tbl tfoot tr { background: linear-gradient(90deg, #F97316, #FBBF24); }
+  .tbl tfoot td { padding: 13px 14px; font-weight: 700; color: white; font-size: 0.95rem; }
+  .btn-icon { width: 28px; height: 28px; border: none; border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 0.82rem; transition: transform 0.15s; vertical-align: middle; margin: 0 2px; }
+  .btn-icon:hover { transform: scale(1.2); }
+  .btn-edit { background: #FEF3C7; color: #B45309; }
+  .btn-del { background: #FEE2E2; color: #B91C1C; }
+  .empty-state { padding: 48px 0; text-align: center; }
+  .empty-icon { margin-bottom: 10px; display: flex; justify-content: center; }
+  .empty-text { font-weight: 700; font-size: 1rem; color: #FB923C; }
+
+  .btn-pdf {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: linear-gradient(135deg, #1C1C1C, #333); color: white; border: none; border-radius: 12px; padding: 13px 22px;
+    font-family: Arial Black, Arial, sans-serif; font-weight: 900; font-size: 0.95rem;
+    cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 14px #0004; margin-bottom: 22px; width: 100%;
+  }
+  .btn-pdf:hover { transform: translateY(-2px); background: #F97316; }
+
+  .compare-card { background: white; border-radius: 20px; padding: 18px 22px; box-shadow: 0 2px 18px #F9731614; border: 2px solid #FED7AA; }
+  .compare-title { font-family: Arial Black, Arial, sans-serif; font-weight: 900; color: #EA580C; margin-bottom: 12px; font-size: 0.95rem; }
+  .compare-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed #FED7AA; }
+  .compare-row:last-child { border-bottom: none; }
+  .change-up { color: #EF4444; font-weight: 700; font-size: 0.88rem; }
+  .change-down { color: #22C55E; font-weight: 700; font-size: 0.88rem; }
+  .change-same { color: #94A3B8; font-weight: 700; font-size: 0.88rem; }
+
+  .page-footer { text-align: center; padding: 22px 16px 28px; font-size: 0.78rem; color: #C2773A; font-weight: 700; border-top: 1px solid #FED7AA; letter-spacing: 0.5px; }
+  .page-footer span { color: #F97316; }
+
+  #toast { position: fixed; bottom: 28px; right: 24px; z-index: 999; background: #1C1C1C; color: white; padding: 12px 22px; border-radius: 14px; font-weight: 700; font-size: 0.92rem; box-shadow: 0 4px 20px #0004; animation: slideup 0.3s ease; border-left: 4px solid #F97316; display: none; }
+  #toast.show { display: block; }
+  #toast.error { border-left-color: #EF4444; }
+  @keyframes slideup { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+
+
+  /* BUDGET BAR */
+  .budget-card {
+    background: white; border-radius: 20px; padding: 18px 22px 16px;
+    box-shadow: 0 2px 18px #F9731614; margin-bottom: 22px;
+    border: 2px solid #FED7AA;
+  }
+  .budget-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+  .budget-title { font-family: Arial Black, Arial, sans-serif; font-weight: 900; color: #EA580C; font-size: 1rem; }
+  .budget-input-wrap { display: flex; align-items: center; gap: 8px; }
+  .budget-input-wrap span { font-weight: 700; color: #EA580C; font-size: 1.05rem; }
+  .budget-input {
+    border: 2px solid #FED7AA; border-radius: 10px; padding: 7px 12px;
+    font-family: Arial Black, Arial, sans-serif; font-weight: 900; font-size: 1rem;
+    color: #1C1C1C; width: 160px; outline: none; background: #FFF7ED;
+    transition: border 0.2s;
+  }
+  .budget-input:focus { border-color: #F97316; background: white; }
+  .budget-nums { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; flex-wrap: wrap; gap: 6px; }
+  .budget-num-item { text-align: center; }
+  .budget-num-label { font-size: 0.68rem; font-weight: 700; color: #9A3412; text-transform: uppercase; letter-spacing: 0.8px; }
+  .budget-num-val { font-family: Arial Black, Arial, sans-serif; font-weight: 900; font-size: 1.1rem; }
+  .budget-bar-track {
+    width: 100%; height: 14px; background: #FEF3C7;
+    border-radius: 99px; overflow: hidden; margin-top: 6px;
+  }
+  .budget-bar-fill {
+    height: 100%; border-radius: 99px;
+    background: linear-gradient(90deg, #22C55E, #16A34A);
+    transition: width 0.4s ease, background 0.4s ease;
+  }
+  .budget-bar-fill.warn  { background: linear-gradient(90deg, #F59E0B, #D97706); }
+  .budget-bar-fill.over  { background: linear-gradient(90deg, #EF4444, #B91C1C); }
+  .budget-status { font-size: 0.78rem; font-weight: 700; margin-top: 6px; }
+  .budget-status.ok   { color: #15803D; }
+  .budget-status.warn { color: #B45309; }
+  .budget-status.over { color: #B91C1C; }
+
+  @media (max-width: 700px) {
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .form-grid { grid-template-columns: 1fr 1fr; }
+    .header-title { font-size: 1.3rem; }
+  }
+  @media (max-width: 420px) {
+    .stats-row { grid-template-columns: 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+  }
+</style>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#F97316">
+  <link rel="apple-touch-icon" href="Screenshot 2026-02-26 233349.png">
+</head>
+<body>
+
+<!-- ==================== LOGIN PAGE ==================== -->
+<div class="auth-page" id="pageLogin">
+  <div class="auth-logo-wrap">
+    <img id="logoLogin" src="" alt="eBudget Logo"/>
+    <div class="auth-brand">eBudget</div>
+    <div class="auth-tagline">Grocery Budget Tracker</div>
+  </div>
+  <div class="auth-card">
+    <div class="auth-title">Welcome Back</div>
+    <div class="auth-sub">Sign in to your eBudget account</div>
+    <div class="auth-global-err" id="loginErr">Invalid email or password.</div>
+    <div class="auth-field">
+      <label>Email Address</label>
+      <input type="email" id="loginEmail" placeholder="you@example.com"/>
+    </div>
+    <div class="auth-field">
+      <label>Password</label>
+      <input type="password" id="loginPassword" placeholder="••••••••"/>
+    </div>
+    <button class="auth-btn" onclick="doLogin()">Sign In</button>
+    <div class="auth-switch">Don't have an account? <a onclick="showPage('pageRegister')">Register here</a></div>
+  </div>
+</div>
+
+<!-- ==================== REGISTER PAGE ==================== -->
+<div class="auth-page" id="pageRegister" style="display:none">
+  <div class="auth-logo-wrap">
+    <img id="logoRegister" src="" alt="eBudget Logo"/>
+    <div class="auth-brand">eBudget</div>
+    <div class="auth-tagline">Grocery Budget Tracker</div>
+  </div>
+  <div class="auth-card">
+    <div class="auth-title">Create Account</div>
+    <div class="auth-sub">Join eBudget — monthly subscription required</div>
+    <div class="auth-global-err" id="regErr"></div>
+    <div class="auth-field">
+      <label>Full Name</label>
+      <input type="text" id="regName" placeholder="e.g. Lubuto Chisenga"/>
+    </div>
+    <div class="auth-field">
+      <label>Email Address</label>
+      <input type="email" id="regEmail" placeholder="you@example.com"/>
+    </div>
+    <div class="auth-field">
+      <label>Phone Number</label>
+      <input type="tel" id="regPhone" placeholder="e.g. +260 97 123 4567"/>
+    </div>
+    <div class="auth-field">
+      <label>Password</label>
+      <input type="password" id="regPassword" placeholder="Min 6 characters"/>
+    </div>
+    <button class="auth-btn" onclick="doRegister()">Create Account</button>
+    <div class="auth-switch">Already have an account? <a onclick="showPage('pageLogin')">Sign in</a></div>
+  </div>
+</div>
+
+<!-- ==================== PENDING PAGE ==================== -->
+<div class="auth-page" id="pagePending" style="display:none">
+  <div class="auth-logo-wrap">
+    <img id="logoPending" src="" alt="eBudget Logo"/>
+    <div class="auth-brand">eBudget</div>
+    <div class="auth-tagline">Grocery Budget Tracker</div>
+  </div>
+  <div class="auth-card">
+    <div class="pending-box">
+      <div class="pending-icon">⏳</div>
+      <div class="pending-title">Account Pending Approval</div>
+      <div class="pending-text">
+        Thank you for registering! Your account is awaiting approval from the administrator.<br><br>
+        Once approved (after payment confirmation), you'll be able to sign in.<br><br>
+        <strong>Please check back later.</strong>
+      </div>
+    </div>
+    <div class="auth-switch" style="margin-top:20px">
+      <a onclick="showPage('pageLogin')">← Back to Login</a>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== EXPIRED PAGE ==================== -->
+<div class="auth-page" id="pageExpired" style="display:none">
+  <div class="auth-logo-wrap">
+    <img id="logoExpired" src="" alt="eBudget Logo"/>
+    <div class="auth-brand">eBudget</div>
+    <div class="auth-tagline">Grocery Budget Tracker</div>
+  </div>
+  <div class="auth-card">
+    <div class="pending-box" style="border-color:#FCA5A5;background:#FFF5F5">
+      <div class="pending-icon" style="font-size:2rem">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+      <div class="pending-title" style="color:#B91C1C">Subscription Expired</div>
+      <div class="pending-text">
+        Your 30-day subscription has expired. Your account has been temporarily suspended.<br><br>
+        Please make a payment to reactivate your account. Once your payment is confirmed by the administrator, you will regain full access.<br><br>
+        <strong>Contact the admin to renew your subscription.</strong>
+      </div>
+    </div>
+    <div class="auth-switch" style="margin-top:20px">
+      <a onclick="showPage('pageLogin')">Back to Login</a>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MAIN APP ==================== -->
+<div class="app-page" id="pageApp">
+  <div class="header">
+    <img class="hdr-logo" id="appLogoHeader" src="" alt="eBudget"/>
+    <div>
+      <div class="header-title">eBudget</div>
+      <div class="header-sub">Grocery Budget Tracker</div>
+    </div>
+    <div class="header-right">
+      <div class="user-badge"> <span id="headerUserName"></span></div>
+      <select class="month-select" id="selMonth"></select>
+      <select class="month-select" id="selYear"></select>
+      <button class="btn-logout" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="container">
+  <!-- BUDGET PLANNER -->
+  <div class="budget-card">
+    <div class="budget-top">
+      <div class="budget-title">Budget Planner</div>
+      <div class="budget-input-wrap">
+        <span>K</span>
+        <input class="budget-input" type="number" id="budgetInput" placeholder="0.00" min="0" step="0.01" oninput="saveBudget()" />
+      </div>
+    </div>
+    <div class="budget-nums">
+      <div class="budget-num-item"><div class="budget-num-label">Total Budget</div><div class="budget-num-val" id="budgetTotal" style="color:#1C1C1C">K0.00</div></div>
+      <div class="budget-num-item"><div class="budget-num-label">Spent</div><div class="budget-num-val" id="budgetSpent" style="color:#F97316">K0.00</div></div>
+      <div class="budget-num-item"><div class="budget-num-label">Remaining</div><div class="budget-num-val" id="budgetRemaining" style="color:#15803D">K0.00</div></div>
+    </div>
+    <div class="budget-bar-track"><div class="budget-bar-fill" id="budgetBarFill" style="width:0%"></div></div>
+    <div class="budget-status ok" id="budgetStatus">Set a budget to start tracking.</div>
+  </div>
+
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">Total Spend</div><div class="stat-value" id="statSpend">K0.00</div></div>
+      <div class="stat-card"><div class="stat-label">Items Logged</div><div class="stat-value" id="statItems">0</div></div>
+      <div class="stat-card"><div class="stat-label">Total Qty</div><div class="stat-value" id="statQty">0</div></div>
+    </div>
+
+    <div class="form-card">
+      <div class="form-title" id="formTitle">Add Grocery Item</div>
+      <div class="form-grid">
+        <div class="field"><label>Item Name</label><input type="text" id="fName" placeholder="e.g. Whole Milk" autocomplete="off"/><span class="err-msg" id="errName"></span></div>
+        <div class="field"><label>Quantity</label><input type="number" id="fQty" placeholder="e.g. 2" min="0"/><span class="err-msg" id="errQty"></span></div>
+        <div class="field">
+          <label>Weight</label>
+          <div class="weight-row">
+            <input type="number" id="fWeight" placeholder="e.g. 1.5" min="0" step="0.01"/>
+            <select id="fWeightUnit"><option value="kg">kg</option><option value="g">g</option><option value="lbs">lbs</option><option value="L">L</option><option value="ml">ml</option></select>
+          </div>
+          <span class="err-msg" id="errWeight"></span>
+        </div>
+        <div class="field"><label>Unit Price (K)</label><input type="number" id="fPrice" placeholder="e.g. 45.00" min="0" step="0.01"/><span class="err-msg" id="errPrice"></span></div>
+        <div class="field">
+          <label>Category</label>
+          <select id="fCategory">
+            <option value="">— None —</option>
+            <option value="Dairy">Dairy</option><option value="Meat">Meat</option>
+            <option value="Vegetables">Vegetables</option><option value="Fruits">Fruits</option>
+            <option value="Grains">Grains</option><option value="Beverages">Beverages</option>
+            <option value="Snacks">Snacks</option><option value="Cleaning">Cleaning</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <button class="btn-add" id="btnAdd" onclick="handleAdd()">Add</button>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-scroll">
+        <table class="tbl">
+          <thead><tr><th>#</th><th>Item</th><th>Category</th><th>Qty</th><th>Weight</th><th>Unit Price</th><th>Subtotal</th><th>Actions</th></tr></thead>
+          <tbody id="tableBody"></tbody>
+          <tfoot id="tableFoot" style="display:none">
+            <tr><td colspan="6" style="text-align:right;">TOTAL FOR <span id="footMonth"></span></td><td id="footTotal"></td><td></td></tr>
+          </tfoot>
+        </table>
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg></div>
+          <div class="empty-text">No items yet. Add your first grocery item above!</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-pdf" id="btnPdf" style="display:none" onclick="generatePDF()">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Download PDF Report
+    </button>
+
+    <div class="compare-card" id="compareCard" style="display:none">
+      <div class="compare-title">Price Changes vs Previous Month</div>
+      <div id="compareBody"></div>
+    </div>
+  </div>
+
+  <div class="page-footer">Created by <span>Lubuto Chisenga</span> &nbsp;•&nbsp; eBudget Grocery Tracker</div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ============================================================
+// LOGO (base64 embedded)
+// ============================================================
+const LOGO_B64 = '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';
+const LOGO_SRC = 'data:image/png;base64,' + LOGO_B64;
+document.getElementById('logoLogin').src = LOGO_SRC;
+document.getElementById('logoRegister').src = LOGO_SRC;
+document.getElementById('logoPending').src = LOGO_SRC;
+document.getElementById('logoExpired').src = LOGO_SRC;
+document.getElementById('appLogoHeader').src = LOGO_SRC;
+
+// ============================================================
+// AUTH HELPERS
+// ============================================================
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+// ── API ────────────────────────────────────────────────────
+const API = 'https://ebudget-tlg8.onrender.com';
+
+async function apiCall(path, options = {}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options
+  });
+  const data = await res.json();
+  return { ok: res.ok, status: res.status, data };
+}
+
+function getCurrentUser() {
+  try { return JSON.parse(sessionStorage.getItem('ebudget_current') || 'null'); } catch(e) { return null; }
+}
+function setCurrentUser(u) { sessionStorage.setItem('ebudget_current', JSON.stringify(u)); }
+
+function showPage(id) {
+  ['pageLogin','pageRegister','pagePending','pageExpired','pageApp'].forEach(p => {
+    const el = document.getElementById(p);
+    if (el) el.style.display = p === id ? (id === 'pageApp' ? 'block' : 'flex') : 'none';
+  });
+}
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+  const pass  = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginErr');
+  const btn   = document.querySelector('#pageLogin .auth-btn');
+  errEl.style.display = 'none';
+  btn.textContent = 'Signing in...'; btn.disabled = true;
+
+  try {
+    const { ok, data } = await apiCall('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password: pass })
+    });
+    if (!ok) {
+      if (data.error === 'expired')  { showPage('pageExpired');  return; }
+      if (data.error === 'pending')  { errEl.style.display = 'block'; errEl.textContent = 'Your account is pending admin approval.'; return; }
+      if (data.error === 'rejected') { errEl.style.display = 'block'; errEl.textContent = 'Your account has been rejected. Contact admin.'; return; }
+      errEl.style.display = 'block'; errEl.textContent = data.error || 'Invalid email or password.'; return;
+    }
+    setCurrentUser(data.user);
+    await loadUserData(data.user);
+    showPage('pageApp');
+  } catch(e) {
+    errEl.style.display = 'block'; errEl.textContent = 'Connection error. Please try again.';
+  } finally {
+    btn.textContent = 'Sign In'; btn.disabled = false;
+  }
+}
+
+async function doRegister() {
+  const name  = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim().toLowerCase();
+  const phone = document.getElementById('regPhone').value.trim();
+  const pass  = document.getElementById('regPassword').value;
+  const errEl = document.getElementById('regErr');
+  const btn   = document.querySelector('#pageRegister .auth-btn');
+  errEl.style.display = 'none';
+
+  if (!name || !email || !phone || !pass) { errEl.style.display = 'block'; errEl.textContent = 'All fields are required.'; return; }
+  if (pass.length < 6) { errEl.style.display = 'block'; errEl.textContent = 'Password must be at least 6 characters.'; return; }
+  if (!/\S+@\S+\.\S+/.test(email)) { errEl.style.display = 'block'; errEl.textContent = 'Please enter a valid email.'; return; }
+
+  btn.textContent = 'Creating account...'; btn.disabled = true;
+  try {
+    const { ok, data } = await apiCall('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, phone, password: pass })
+    });
+    if (!ok) { errEl.style.display = 'block'; errEl.textContent = data.error || 'Registration failed.'; return; }
+    showPage('pagePending');
+  } catch(e) {
+    errEl.style.display = 'block'; errEl.textContent = 'Connection error. Please try again.';
+  } finally {
+    btn.textContent = 'Create Account'; btn.disabled = false;
+  }
+}
+
+function doLogout() {
+  sessionStorage.removeItem('ebudget_current');
+  entries = [];
+  _remoteBudgets = {};
+  budgetAmount   = 0;
+  showPage('pageLogin');
+  document.getElementById('loginEmail').value    = '';
+  document.getElementById('loginPassword').value = '';
+}
+
+// ============================================================
+// APP DATA — per user
+// ============================================================
+let entries = [];
+let editIdx = null;
+const today = new Date();
+
+function loadUserData(user) {
+  const users = getUsers();
+  const u = users.find(x => x.id === user.id);
+  entries = u ? (u.entries || []) : [];
+  document.getElementById('headerUserName').textContent = user.name;
+  initSelectors();
+  loadBudget();
+  render();
+}
+
+async function saveUserData() {
+  const cur = getCurrentUser();
+  if (!cur) return;
+  try {
+    await apiCall('/entries/' + cur.id, {
+      method: 'PUT',
+      body: JSON.stringify({ entries, budgets: _remoteBudgets || {} })
+    });
+  } catch(e) { console.warn('Save failed:', e); }
+}
+
+function initSelectors() {
+  const selMonth = document.getElementById('selMonth');
+  const selYear = document.getElementById('selYear');
+  selMonth.innerHTML = ''; selYear.innerHTML = '';
+  MONTHS.forEach((m, i) => {
+    const o = document.createElement('option');
+    o.value = i; o.textContent = m;
+    if (i === today.getMonth()) o.selected = true;
+    selMonth.appendChild(o);
+  });
+  [-1, 0, 1].forEach(d => {
+    const y = today.getFullYear() + d;
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    if (d === 0) o.selected = true;
+    selYear.appendChild(o);
+  });
+  selMonth.addEventListener('change', () => { loadBudget(); render(); });
+  selYear.addEventListener('change', () => { loadBudget(); render(); });
+  ['fName','fQty','fWeight','fPrice'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') handleAdd(); });
+  });
+}
+
+function getSelected() {
+  return { month: +document.getElementById('selMonth').value, year: +document.getElementById('selYear').value };
+}
+function monthEntries() {
+  const { month, year } = getSelected();
+  return entries.filter(e => e.month === month && e.year === year);
+}
+
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show' + (type === 'error' ? ' error' : '');
+  clearTimeout(t._timer); t._timer = setTimeout(() => { t.className = ''; }, 2500);
+}
+
+function validate() {
+  let ok = true;
+  const name = document.getElementById('fName').value.trim();
+  const qty = document.getElementById('fQty').value;
+  const price = document.getElementById('fPrice').value;
+  const weight = document.getElementById('fWeight').value;
+  ['errName','errQty','errPrice','errWeight'].forEach(id => document.getElementById(id).textContent = '');
+  if (!name) { document.getElementById('errName').textContent = 'Item name required'; ok = false; }
+  if (!qty || isNaN(qty) || +qty <= 0) { document.getElementById('errQty').textContent = 'Valid quantity required'; ok = false; }
+  if (!price || isNaN(price) || +price <= 0) { document.getElementById('errPrice').textContent = 'Valid price required'; ok = false; }
+  if (weight && (isNaN(weight) || +weight < 0)) { document.getElementById('errWeight').textContent = 'Valid weight'; ok = false; }
+  return ok;
+}
+
+function handleAdd() {
+  if (!validate()) return;
+  const { month, year } = getSelected();
+  const item = {
+    name: document.getElementById('fName').value.trim(),
+    quantity: document.getElementById('fQty').value,
+    weight: document.getElementById('fWeight').value,
+    weightUnit: document.getElementById('fWeightUnit').value,
+    price: document.getElementById('fPrice').value,
+    category: document.getElementById('fCategory').value,
+    month, year
+  };
+  if (editIdx !== null) {
+    entries[editIdx] = item; editIdx = null;
+    document.getElementById('formTitle').textContent = 'Add Grocery Item';
+    document.getElementById('btnAdd').textContent = 'Add';
+    document.getElementById('btnAdd').classList.remove('edit-mode');
+    showToast('Item updated! ');
+  } else {
+    entries.push(item); showToast('Item added! ');
+  }
+  clearForm(); saveUserData(); render();
+  document.getElementById('fName').focus();
+}
+
+function clearForm() {
+  ['fName','fQty','fWeight','fPrice'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fWeightUnit').value = 'kg';
+  document.getElementById('fCategory').value = '';
+}
+
+function handleEdit(globalIdx) {
+  editIdx = globalIdx;
+  const item = entries[globalIdx];
+  document.getElementById('fName').value = item.name;
+  document.getElementById('fQty').value = item.quantity;
+  document.getElementById('fWeight').value = item.weight || '';
+  document.getElementById('fWeightUnit').value = item.weightUnit || 'kg';
+  document.getElementById('fPrice').value = item.price;
+  document.getElementById('fCategory').value = item.category || '';
+  document.getElementById('formTitle').textContent = 'Edit Item';
+  document.getElementById('btnAdd').textContent = 'Update';
+  document.getElementById('btnAdd').classList.add('edit-mode');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function handleDelete(globalIdx) {
+  entries.splice(globalIdx, 1);
+  if (editIdx === globalIdx) { editIdx = null; clearForm(); document.getElementById('formTitle').textContent = 'Add Grocery Item'; document.getElementById('btnAdd').textContent = 'Add'; document.getElementById('btnAdd').classList.remove('edit-mode'); }
+  showToast('Item removed ', 'error'); saveUserData(); render();
+}
+
+function normalizeWeightToKg(val, unit) {
+  const v = parseFloat(val) || 0;
+  if (unit === 'g') return v / 1000;
+  if (unit === 'lbs') return v * 0.453592;
+  if (unit === 'L') return v;
+  if (unit === 'ml') return v / 1000;
+  return v;
+}
+
+
+let budgetAmount = 0;
+let _remoteBudgets = {};
+
+function saveBudget() {
+  const val = parseFloat(document.getElementById('budgetInput').value) || 0;
+  budgetAmount = val;
+  const { month, year } = getSelected();
+  if (!_remoteBudgets) _remoteBudgets = {};
+  _remoteBudgets[month + '_' + year] = val;
+  saveUserData();
+  renderBudget();
+}
+
+function loadBudget() {
+  const { month, year } = getSelected();
+  const val = (_remoteBudgets && _remoteBudgets[month + '_' + year]) || 0;
+  budgetAmount = val;
+  document.getElementById('budgetInput').value = val > 0 ? val : '';
+}
+
+function renderBudget() {
+  const items = monthEntries();
+  const spent = items.reduce((s, i) => s + (parseFloat(i.price) * parseFloat(i.quantity) || 0), 0);
+  const budget = budgetAmount;
+  const remaining = budget - spent;
+  const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
+
+  document.getElementById('budgetTotal').textContent = 'K' + budget.toFixed(2);
+  document.getElementById('budgetSpent').textContent = 'K' + spent.toFixed(2);
+  document.getElementById('budgetRemaining').textContent = (remaining < 0 ? '-K' : 'K') + Math.abs(remaining).toFixed(2);
+  document.getElementById('budgetRemaining').style.color = remaining < 0 ? '#B91C1C' : remaining < budget * 0.2 ? '#B45309' : '#15803D';
+
+  const fill = document.getElementById('budgetBarFill');
+  const status = document.getElementById('budgetStatus');
+  fill.style.width = pct + '%';
+
+  if (budget === 0) {
+    fill.className = 'budget-bar-fill';
+    fill.style.width = '0%';
+    status.textContent = 'Set a budget above to start tracking.';
+    status.className = 'budget-status ok';
+  } else if (spent > budget) {
+    fill.className = 'budget-bar-fill over';
+    status.textContent = 'Over budget by K' + Math.abs(remaining).toFixed(2) + '!';
+    status.className = 'budget-status over';
+  } else if (pct >= 80) {
+    fill.className = 'budget-bar-fill warn';
+    status.textContent = 'Warning: ' + pct.toFixed(0) + '% of budget used. K' + remaining.toFixed(2) + ' remaining.';
+    status.className = 'budget-status warn';
+  } else {
+    fill.className = 'budget-bar-fill';
+    status.textContent = pct.toFixed(0) + '% of budget used. K' + remaining.toFixed(2) + ' remaining.';
+    status.className = 'budget-status ok';
+  }
+}
+
+function render() {
+  const items = monthEntries();
+  const { month, year } = getSelected();
+  const tbody = document.getElementById('tableBody');
+  const empty = document.getElementById('emptyState');
+  const foot = document.getElementById('tableFoot');
+  const btnPdf = document.getElementById('btnPdf');
+  const total = items.reduce((s, i) => s + (parseFloat(i.price) * parseFloat(i.quantity) || 0), 0);
+  const totalQty = items.reduce((s, i) => s + (parseFloat(i.quantity) || 0), 0);
+  document.getElementById('statSpend').textContent = 'K' + total.toFixed(2);
+  document.getElementById('statItems').textContent = items.length;
+  document.getElementById('statQty').textContent = totalQty;
+  tbody.innerHTML = '';
+  if (items.length === 0) {
+    empty.style.display = 'block'; foot.style.display = 'none'; btnPdf.style.display = 'none';
+  } else {
+    empty.style.display = 'none'; foot.style.display = ''; btnPdf.style.display = 'flex';
+    document.getElementById('footMonth').textContent = MONTHS[month] + ' ' + year;
+    document.getElementById('footTotal').textContent = 'K' + total.toFixed(2);
+    items.forEach((item, idx) => {
+      const globalIdx = entries.indexOf(item);
+      const subtotal = (parseFloat(item.price) * parseFloat(item.quantity) || 0).toFixed(2);
+      const weightStr = item.weight ? `${parseFloat(item.weight)}${item.weightUnit}` : '—';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${idx+1}</td><td class="name">${escHtml(item.name)}</td><td>${escHtml(item.category||'—')}</td><td>${item.quantity}</td><td>${weightStr}</td><td>K${parseFloat(item.price).toFixed(2)}</td><td class="price">K${subtotal}</td><td><button class="btn-icon btn-edit" onclick="handleEdit(${globalIdx})"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="btn-icon btn-del" onclick="handleDelete(${globalIdx})"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg></button></td>`;
+      tbody.appendChild(tr);
+    });
+  }
+  const cur = getCurrentUser();
+  const userName = cur ? cur.name : '';
+  document.getElementById('btnPdf').innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Download PDF — ${MONTHS[month]} ${year}`;
+  renderBudget();
+  renderComparison();
+}
+
+function renderComparison() {
+  const { month, year } = getSelected();
+  const prevMonth = month === 0 ? 11 : month - 1;
+  const prevYear = month === 0 ? year - 1 : year;
+  const cur = monthEntries();
+  const prev = entries.filter(e => e.month === prevMonth && e.year === prevYear);
+  const card = document.getElementById('compareCard');
+  const body = document.getElementById('compareBody');
+  const changes = cur.map(c => {
+    const p = prev.find(x => x.name.toLowerCase() === c.name.toLowerCase());
+    if (!p) return null;
+    const diff = parseFloat(c.price) - parseFloat(p.price);
+    const pct = parseFloat(p.price) > 0 ? ((diff / parseFloat(p.price)) * 100).toFixed(1) : null;
+    return { name: c.name, diff: diff.toFixed(2), pct };
+  }).filter(Boolean);
+  if (changes.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  body.innerHTML = changes.map(c => {
+    const cls = +c.diff > 0 ? 'change-up' : +c.diff < 0 ? 'change-down' : 'change-same';
+    const arrow = +c.diff > 0 ? `▲ +K${c.diff}` : +c.diff < 0 ? `▼ -K${Math.abs(c.diff)}` : '→ Same';
+    return `<div class="compare-row"><span style="font-weight:700">${escHtml(c.name)}</span><span class="${cls}">${arrow}${c.pct ? ` (${c.pct}%)` : ''}</span></div>`;
+  }).join('');
+}
+
+function escHtml(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function generatePDF() {
+  const { jsPDF } = window.jspdf;
+  const { month, year } = getSelected();
+  const items = monthEntries();
+  const cur = getCurrentUser();
+  const userName = cur ? cur.name : '';
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = 210, H = 297;
+  doc.setFillColor(255,255,255); doc.rect(0,0,W,H,'F');
+  doc.setFillColor(249,115,22); doc.rect(0,0,W,46,'F');
+  // Logo in PDF
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 100; canvas.height = 100;
+    const ctx = canvas.getContext('2d');
+    const img = new Image(); img.src = LOGO_SRC;
+    ctx.beginPath(); ctx.arc(50,50,50,0,Math.PI*2); ctx.closePath(); ctx.clip();
+    ctx.drawImage(img, 0, 0, 100, 100);
+    doc.addImage(canvas.toDataURL('image/png'), 'PNG', 10, 11, 24, 24);
+  } catch(e) {
+    doc.setFillColor(251,191,36); doc.circle(22,23,11,'F');
+  }
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(24); doc.setFont('helvetica','bold');
+  doc.text('eBudget', 40, 22);
+  doc.setFontSize(9); doc.setFont('helvetica','normal');
+  doc.text('Grocery Budget Tracker', 40, 30);
+  if (userName) {
+    doc.setFontSize(9); doc.setFont('helvetica','bold');
+    doc.text('Prepared for: ' + userName, 40, 38);
+  }
+  doc.setFillColor(251,191,36);
+  doc.roundedRect(138,13,58,18,4,4,'F');
+  doc.setTextColor(124,52,0); doc.setFontSize(12); doc.setFont('helvetica','bold');
+  doc.text(`${MONTHS[month]} ${year}`, 167, 24, {align:'center'});
+  const total = items.reduce((s,i) => s+(parseFloat(i.price)*parseFloat(i.quantity)||0),0);
+  const totalQty = items.reduce((s,i) => s+(parseFloat(i.quantity)||0),0);
+  // Budget info for PDF
+  const pdfBudget = budgetAmount || 0;
+  const pdfRemaining = pdfBudget - total;
+  const pdfOver = pdfBudget > 0 && total > pdfBudget;
+
+  doc.setFillColor(255,247,237);
+  doc.roundedRect(14,52,W-28,32,4,4,'F');
+  doc.setTextColor(249,115,22); doc.setFontSize(10); doc.setFont('helvetica','bold');
+  doc.text(`Total Qty: ${totalQty}`, 22, 62);
+  doc.text(`Total Spend: K${total.toFixed(2)}`, 115, 62);
+  if (pdfBudget > 0) {
+    doc.setTextColor(180,100,40);
+    doc.text(`Budget: K${pdfBudget.toFixed(2)}`, 22, 73);
+    if (pdfOver) {
+      doc.setTextColor(185,28,28);
+      doc.text(`Over budget by K${Math.abs(pdfRemaining).toFixed(2)}`, 115, 73);
+    } else {
+      doc.setTextColor(21,128,61);
+      doc.text(`Remaining: K${pdfRemaining.toFixed(2)}`, 115, 73);
+    }
+  }
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(180,100,40);
+  doc.text(`Entries: ${items.length}  •  Generated: ${new Date().toLocaleDateString()}`, 22, pdfBudget > 0 ? 82 : 73);
+  const tY = pdfBudget > 0 ? 94 : 84;
+  const cols = [20,32,90,115,135,158,183];
+  doc.setFillColor(249,115,22); doc.roundedRect(14,tY,W-28,10,2,2,'F');
+  doc.setTextColor(255,255,255); doc.setFontSize(9); doc.setFont('helvetica','bold');
+  ['#','Item','Category','Qty','Weight','Unit K','Subtotal'].forEach((h,i) => doc.text(h,cols[i],tY+7));
+  let y = tY+10;
+  items.forEach((item,idx) => {
+    const sub = (parseFloat(item.price)*parseFloat(item.quantity)||0).toFixed(2);
+    const wStr = item.weight ? `${parseFloat(item.weight)}${item.weightUnit}` : '-';
+    doc.setFillColor(...(idx%2===0?[255,255,255]:[255,247,237]));
+    doc.rect(14,y,W-28,9,'F');
+    doc.setTextColor(60,60,60); doc.setFontSize(8.5); doc.setFont('helvetica','normal');
+    doc.text(`${idx+1}`,cols[0],y+6.5);
+    doc.text(item.name.substring(0,22),cols[1],y+6.5);
+    doc.text((item.category||'—').substring(0,14),cols[2],y+6.5);
+    doc.text(`${item.quantity}`,cols[3],y+6.5);
+    doc.text(wStr,cols[4],y+6.5);
+    doc.text(`K${parseFloat(item.price).toFixed(2)}`,cols[5],y+6.5);
+    doc.setFont('helvetica','bold'); doc.setTextColor(249,115,22);
+    doc.text(`K${sub}`,cols[6],y+6.5);
+    y+=9; if(y>H-30){ doc.addPage(); y=20; }
+  });
+  doc.setFillColor(249,115,22); doc.rect(14,y,W-28,10,'F');
+  doc.setTextColor(255,255,255); doc.setFontSize(11); doc.setFont('helvetica','bold');
+  doc.text('TOTAL',cols[1],y+7); doc.text(`K${total.toFixed(2)}`,cols[6],y+7);
+  doc.setTextColor(180,180,180); doc.setFontSize(7.5); doc.setFont('helvetica','normal');
+  doc.text('Created by Lubuto Chisenga  •  eBudget Grocery Tracker', W/2, H-8, {align:'center'});
+  doc.save(`eBudget_${userName.replace(/\s+/g,'_')}_${MONTHS[month]}_${year}.pdf`);
+}
+
+// ============================================================
+// INIT — check if already logged in
+// ============================================================
+(async function init() {
+  const cur = getCurrentUser();
+  if (cur) {
+    // Verify session is still valid by loading entries from server
+    try {
+      const { ok, data } = await apiCall('/entries/' + cur.id);
+      if (ok) {
+        entries        = data.entries || [];
+        _remoteBudgets = data.budgets || {};
+        document.getElementById('headerUserName').textContent = cur.name;
+        initSelectors();
+        loadBudget();
+        render();
+        showPage('pageApp');
+        return;
+      }
+    } catch(e) { /* fall through */ }
+  }
+  showPage('pageLogin');
+})();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(e => console && console.warn('SW reg failed', e));
+}
+</script>
+</body>
+</html>
