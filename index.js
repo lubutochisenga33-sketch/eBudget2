@@ -11,14 +11,8 @@ const PORT = process.env.PORT || 3000;
 // ============================================================
 // MIDDLEWARE
 // ============================================================
-app.use(cors({
-  origin: [
-    'https://ebudget-tlg8.onrender.com',
-    'http://localhost:3000'
-  ],
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','admin-username','admin-password']
-}));
+app.use(cors());
+app.options('*', cors());
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
 
