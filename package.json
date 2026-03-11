@@ -1,7 +1,7 @@
 {
   "name": "ebudget-backend",
   "version": "1.0.0",
-  "description": "Backend server for eBudget Grocery Tracker with Cloudinary storage",
+  "description": "Backend server for eBudget Grocery Tracker",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -13,8 +13,8 @@
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "body-parser": "^1.20.2",
-    "cloudinary": "^1.41.1",
-    "bcryptjs": "^2.4.3"
+    "bcryptjs": "^2.4.3",
+    "@supabase/supabase-js": "^2.45.0"
   },
   "engines": {
     "node": ">=14.0.0"
