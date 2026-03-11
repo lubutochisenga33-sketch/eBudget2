@@ -473,7 +473,7 @@ async function apiCall(path, opts = {}) {
   const res = await fetch(API + path, { ...rest, headers: { 'Content-Type': 'application/json', ...(h||{}) } });
   let data = {};
   try { data = await res.json(); } catch(e) { data = {}; }
-  return { ok: res.ok, status: res.status, data };
+  return { ok: res.ok, data };
 }
 function getCurrentUser() { try { return JSON.parse(sessionStorage.getItem('ebudget_current') || 'null'); } catch(e) { return null; } }
 function setCurrentUser(u) { sessionStorage.setItem('ebudget_current', JSON.stringify(u)); }
@@ -492,34 +492,56 @@ async function doLogin() {
   const btn = document.querySelector('#pageLogin .auth-btn');
   errEl.style.display = 'none';
   btn.disabled = true; btn.textContent = 'Signing in...';
+
+  let response = null;
   try {
-    const { ok, data } = await apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password: pass }) });
-    console.log('Login response:', ok, JSON.stringify(data));
-    if (!ok || !data || !data.user) {
-      const err = data && data.error;
-      if (err === 'expired')  { showPage('pageExpired'); return; }
-      if (err === 'pending')  { errEl.style.display = 'block'; errEl.textContent = 'Your account is pending admin approval.'; return; }
-      if (err === 'rejected') { errEl.style.display = 'block'; errEl.textContent = 'Your account has been rejected. Contact admin.'; return; }
-      errEl.style.display = 'block'; errEl.textContent = err || 'Invalid email or password.'; return;
-    }
-    setCurrentUser(data.user);
-    // Load entries separately
-    try {
-      const { ok: eok, data: edata } = await apiCall('/entries/' + data.user.id);
-      entries  = eok ? (edata.entries || []) : [];
-      _budgets = eok ? (edata.budgets || {}) : {};
-    } catch(e2) { entries = []; _budgets = {}; }
-    document.getElementById('headerUserName').textContent = data.user.name;
-    document.getElementById('headerUserNameMobile').textContent = data.user.name;
-    initSelectors(); loadBudget(); render();
-    showSubBanner(data.user);
-    showPage('pageApp');
-  } catch(e) {
-    console.error('Login exception:', e);
-    errEl.style.display = 'block'; errEl.textContent = 'Connection error. Please try again.';
-  } finally {
+    response = await fetch('https://ebudget-tlg8.onrender.com/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pass })
+    });
+  } catch(networkErr) {
+    errEl.style.display = 'block';
+    errEl.textContent = 'Cannot reach server. Check your internet connection.';
     btn.disabled = false; btn.textContent = 'Sign In';
+    return;
   }
+
+  let data = {};
+  try { data = await response.json(); } catch(e) { data = {}; }
+
+  btn.disabled = false; btn.textContent = 'Sign In';
+
+  if (!response.ok) {
+    if (data.error === 'expired')  { showPage('pageExpired'); return; }
+    if (data.error === 'pending')  { errEl.style.display = 'block'; errEl.textContent = 'Your account is pending admin approval.'; return; }
+    if (data.error === 'rejected') { errEl.style.display = 'block'; errEl.textContent = 'Your account has been rejected. Contact admin.'; return; }
+    errEl.style.display = 'block';
+    errEl.textContent = data.error || 'Invalid email or password.';
+    return;
+  }
+
+  if (!data.user) {
+    errEl.style.display = 'block';
+    errEl.textContent = 'Unexpected server response. Please try again.';
+    return;
+  }
+
+  setCurrentUser(data.user);
+  try {
+    const eRes = await fetch('https://ebudget-tlg8.onrender.com/entries/' + data.user.id, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const eData = eRes.ok ? await eRes.json() : {};
+    entries  = eData.entries || [];
+    _budgets = eData.budgets || {};
+  } catch(e) { entries = []; _budgets = {}; }
+
+  document.getElementById('headerUserName').textContent = data.user.name;
+  document.getElementById('headerUserNameMobile').textContent = data.user.name;
+  initSelectors(); loadBudget(); render();
+  showSubBanner(data.user);
+  showPage('pageApp');
 }
 
 async function doRegister() {
