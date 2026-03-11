@@ -493,19 +493,29 @@ async function doLogin() {
   errEl.style.display = 'none';
   btn.disabled = true; btn.textContent = 'Signing in...';
   try {
-    const { ok, status, data } = await apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password: pass }) });
-    if (data.error === 'expired') { showPage('pageExpired'); return; }
-    if (data.error === 'pending')  { errEl.style.display = 'block'; errEl.textContent = 'Your account is pending admin approval.'; return; }
-    if (data.error === 'rejected') { errEl.style.display = 'block'; errEl.textContent = 'Your account has been rejected. Contact admin.'; return; }
-    if (!ok) { errEl.style.display = 'block'; errEl.textContent = data.error || 'Invalid email or password.'; return; }
+    const { ok, data } = await apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password: pass }) });
+    console.log('Login response:', ok, JSON.stringify(data));
+    if (!ok || !data || !data.user) {
+      const err = data && data.error;
+      if (err === 'expired')  { showPage('pageExpired'); return; }
+      if (err === 'pending')  { errEl.style.display = 'block'; errEl.textContent = 'Your account is pending admin approval.'; return; }
+      if (err === 'rejected') { errEl.style.display = 'block'; errEl.textContent = 'Your account has been rejected. Contact admin.'; return; }
+      errEl.style.display = 'block'; errEl.textContent = err || 'Invalid email or password.'; return;
+    }
     setCurrentUser(data.user);
-    await loadUserData(data.user);
+    // Load entries separately
+    try {
+      const { ok: eok, data: edata } = await apiCall('/entries/' + data.user.id);
+      entries  = eok ? (edata.entries || []) : [];
+      _budgets = eok ? (edata.budgets || {}) : {};
+    } catch(e2) { entries = []; _budgets = {}; }
     document.getElementById('headerUserName').textContent = data.user.name;
     document.getElementById('headerUserNameMobile').textContent = data.user.name;
+    initSelectors(); loadBudget(); render();
     showSubBanner(data.user);
     showPage('pageApp');
   } catch(e) {
-    console.error('Login error:', e);
+    console.error('Login exception:', e);
     errEl.style.display = 'block'; errEl.textContent = 'Connection error. Please try again.';
   } finally {
     btn.disabled = false; btn.textContent = 'Sign In';
