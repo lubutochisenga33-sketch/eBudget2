@@ -1,9 +1,9 @@
 const express    = require('express');
 const cors       = require('cors');
 const bodyParser = require('body-parser');
-const cloudinary = require('cloudinary').v2;
 const bcrypt     = require('bcryptjs');
 const path       = require('path');
+const { createClient } = require('@supabase/supabase-js');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -24,94 +24,26 @@ app.use('/admin',  express.static(path.join(__dirname, 'public/admin')));
 app.get('/', (req, res) => res.redirect('/mobile/eBudget.html'));
 
 // ============================================================
-// CLOUDINARY CONFIGURATION
+// SUPABASE CONFIGURATION
 // ============================================================
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key:    process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
-console.log('Cloudinary configured:', process.env.CLOUDINARY_CLOUD_NAME ? 'YES' : 'NO');
-
-// ============================================================
-// IN-MEMORY DATA STORE
-// ============================================================
-let users = [];
-// users shape: { id, name, email, phone, password (hashed), status, approvedAt, entries, budgets, createdAt }
-
-// ============================================================
-// CLOUDINARY PERSISTENCE  (same pattern as MUK)
-// ============================================================
-async function loadDataFromCloudinary() {
-  try {
-    console.log('Loading data from Cloudinary...');
-    const result = await cloudinary.api.resource('ebudget-data/database', { resource_type: 'raw' });
-
-    const https = require('https');
-    const dataString = await new Promise((resolve, reject) => {
-      https.get(result.secure_url, (response) => {
-        let data = '';
-        response.on('data', chunk => data += chunk);
-        response.on('end', () => resolve(data));
-      }).on('error', reject);
-    });
-
-    const data = JSON.parse(dataString);
-    users = data.users || [];
-    console.log(`✅ Data loaded: ${users.length} users`);
-  } catch (error) {
-    console.log('ℹ️  No existing data found, starting fresh');
-  }
-}
-
-async function saveDataToCloudinary() {
-  try {
-    const data = {
-      users,
-      lastUpdated: new Date().toISOString()
-    };
-
-    const jsonString = JSON.stringify(data, null, 2);
-
-    await new Promise((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        {
-          resource_type: 'raw',
-          public_id:     'ebudget-data/database',
-          overwrite:     true,
-          invalidate:    true
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      ).end(Buffer.from(jsonString));
-    });
-
-    console.log('✅ Data saved to Cloudinary at', new Date().toLocaleTimeString());
-    return true;
-  } catch (error) {
-    console.error('❌ Error saving data:', error.message);
-    return false;
-  }
-}
-
-// Auto-save every 10 seconds (same as MUK)
-setInterval(() => saveDataToCloudinary(), 10000);
+console.log('Supabase configured:', process.env.SUPABASE_URL ? 'YES' : 'NO');
 
 // ============================================================
 // HELPERS
 // ============================================================
-function checkExpiry(user) {
-  if (user.status === 'approved' && user.approvedAt) {
-    const diffDays = (Date.now() - new Date(user.approvedAt)) / (1000 * 60 * 60 * 24);
-    if (diffDays >= 30) {
-      user.status = 'expired';
-      return true;
-    }
+function adminAuth(req, res) {
+  const adminUser = req.headers['admin-username'];
+  const adminPass = req.headers['admin-password'];
+  if (adminUser !== process.env.ADMIN_USERNAME || adminPass !== process.env.ADMIN_PASSWORD) {
+    res.status(401).json({ error: 'Unauthorized.' });
+    return false;
   }
-  return false;
+  return true;
 }
 
 function safeUser(u) {
@@ -119,16 +51,31 @@ function safeUser(u) {
   return rest;
 }
 
+// Map Supabase snake_case columns → camelCase for frontend
+function formatUser(u) {
+  return {
+    id:         u.id,
+    name:       u.name,
+    email:      u.email,
+    phone:      u.phone || '',
+    status:     u.status,
+    approvedAt: u.approved_at,
+    entries:    u.entries || [],
+    budgets:    u.budgets  || {},
+    createdAt:  u.created_at
+  };
+}
+
 // ============================================================
 // HEALTH CHECK
 // ============================================================
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
+  const { count } = await supabase.from('users').select('*', { count: 'exact', head: true });
   res.json({
-    status:    'ok',
-    message:   'eBudget server is running',
-    storage:   'Cloudinary',
-    cloudinary: process.env.CLOUDINARY_CLOUD_NAME ? 'configured' : 'missing',
-    users:     users.length
+    status:   'ok',
+    message:  'eBudget server is running',
+    storage:  'Supabase',
+    users:    count || 0
   });
 });
 
@@ -145,26 +92,31 @@ app.post('/auth/register', async (req, res) => {
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters.' });
     }
-    if (users.find(u => u.email === email.toLowerCase().trim())) {
+
+    // Check if email already exists
+    const { data: existing } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+
+    if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
 
     const hashed = await bcrypt.hash(password, 10);
-    const newUser = {
-      id:          Date.now().toString(),
-      name:        name.trim(),
-      email:       email.toLowerCase().trim(),
-      phone:       phone ? phone.trim() : '',
-      password:    hashed,
-      status:      'pending',
-      approvedAt:  null,
-      entries:     [],
-      budgets:     {},
-      createdAt:   new Date().toISOString()
-    };
 
-    users.push(newUser);
-    await saveDataToCloudinary();
+    const { error } = await supabase.from('users').insert({
+      name:       name.trim(),
+      email:      email.toLowerCase().trim(),
+      phone:      phone ? phone.trim() : '',
+      password:   hashed,
+      status:     'pending',
+      entries:    [],
+      budgets:    {}
+    });
+
+    if (error) throw error;
 
     res.status(201).json({ message: 'Registration successful. Your account is pending admin approval.' });
   } catch (error) {
@@ -184,15 +136,25 @@ app.post('/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const user = users.find(u => u.email === email.toLowerCase().trim());
-    if (!user) return res.status(401).json({ error: 'Invalid email or password.' });
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+
+    if (error || !user) return res.status(401).json({ error: 'Invalid email or password.' });
 
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ error: 'Invalid email or password.' });
 
     // Auto-expire check
-    const expired = checkExpiry(user);
-    if (expired) await saveDataToCloudinary();
+    if (user.status === 'approved' && user.approved_at) {
+      const diffDays = (Date.now() - new Date(user.approved_at)) / (1000 * 60 * 60 * 24);
+      if (diffDays >= 30) {
+        await supabase.from('users').update({ status: 'expired' }).eq('id', user.id);
+        return res.status(403).json({ error: 'expired', message: 'Your subscription has expired. Contact admin to renew.' });
+      }
+    }
 
     if (user.status === 'pending')  return res.status(403).json({ error: 'pending',  message: 'Your account is pending admin approval.' });
     if (user.status === 'rejected') return res.status(403).json({ error: 'rejected', message: 'Your account has been rejected. Contact the admin.' });
@@ -200,7 +162,7 @@ app.post('/auth/login', async (req, res) => {
     if (user.status !== 'approved') return res.status(403).json({ error: 'not_approved', message: 'Account not approved.' });
 
     res.json({
-      user: safeUser(user),
+      user:    formatUser(user),
       session: 'session_' + Date.now()
     });
   } catch (error) {
@@ -212,10 +174,15 @@ app.post('/auth/login', async (req, res) => {
 // ============================================================
 // ENTRIES & BUDGETS — GET
 // ============================================================
-app.get('/entries/:userId', (req, res) => {
+app.get('/entries/:userId', async (req, res) => {
   try {
-    const user = users.find(u => u.id === req.params.userId);
-    if (!user) return res.status(404).json({ error: 'User not found.' });
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('entries, budgets')
+      .eq('id', req.params.userId)
+      .single();
+
+    if (error || !user) return res.status(404).json({ error: 'User not found.' });
 
     res.json({
       entries: user.entries || [],
@@ -233,13 +200,14 @@ app.get('/entries/:userId', (req, res) => {
 app.put('/entries/:userId', async (req, res) => {
   try {
     const { entries, budgets } = req.body;
-    const idx = users.findIndex(u => u.id === req.params.userId);
-    if (idx === -1) return res.status(404).json({ error: 'User not found.' });
 
-    users[idx].entries = entries || [];
-    users[idx].budgets = budgets || {};
+    const { error } = await supabase
+      .from('users')
+      .update({ entries: entries || [], budgets: budgets || {} })
+      .eq('id', req.params.userId);
 
-    await saveDataToCloudinary();
+    if (error) throw error;
+
     res.json({ message: 'Data saved successfully.' });
   } catch (error) {
     console.error('Save entries error:', error);
@@ -250,19 +218,21 @@ app.put('/entries/:userId', async (req, res) => {
 // ============================================================
 // ADMIN — LIST USERS
 // ============================================================
-app.get('/admin/users', (req, res) => {
+app.get('/admin/users', async (req, res) => {
   try {
-    const adminUser = req.headers['admin-username'];
-    const adminPass = req.headers['admin-password'];
-    if (adminUser !== process.env.ADMIN_USERNAME || adminPass !== process.env.ADMIN_PASSWORD) {
-      return res.status(401).json({ error: 'Unauthorized.' });
-    }
+    if (!adminAuth(req, res)) return;
 
-    // Enrich with days left
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
     const enriched = users.map(u => {
-      const obj = safeUser(u);
-      if (u.approvedAt && u.status === 'approved') {
-        const diffDays = Math.floor((Date.now() - new Date(u.approvedAt)) / (1000 * 60 * 60 * 24));
+      const obj = formatUser(u);
+      if (u.approved_at && u.status === 'approved') {
+        const diffDays = Math.floor((Date.now() - new Date(u.approved_at)) / (1000 * 60 * 60 * 24));
         obj.daysLeft = Math.max(0, 30 - diffDays);
         if (diffDays >= 30) obj.status = 'expired';
       }
@@ -281,20 +251,18 @@ app.get('/admin/users', (req, res) => {
 // ============================================================
 app.patch('/admin/approve/:id', async (req, res) => {
   try {
-    const adminUser = req.headers['admin-username'];
-    const adminPass = req.headers['admin-password'];
-    if (adminUser !== process.env.ADMIN_USERNAME || adminPass !== process.env.ADMIN_PASSWORD) {
-      return res.status(401).json({ error: 'Unauthorized.' });
-    }
+    if (!adminAuth(req, res)) return;
 
-    const idx = users.findIndex(u => u.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'User not found.' });
+    const { data: user, error } = await supabase
+      .from('users')
+      .update({ status: 'approved', approved_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .select()
+      .single();
 
-    users[idx].status     = 'approved';
-    users[idx].approvedAt = new Date().toISOString();
-    await saveDataToCloudinary();
+    if (error || !user) return res.status(404).json({ error: 'User not found.' });
 
-    res.json({ message: users[idx].name + ' approved.', user: safeUser(users[idx]) });
+    res.json({ message: user.name + ' approved.', user: formatUser(user) });
   } catch (error) {
     console.error('Approve error:', error);
     res.status(500).json({ error: 'Server error: ' + error.message });
@@ -306,19 +274,18 @@ app.patch('/admin/approve/:id', async (req, res) => {
 // ============================================================
 app.patch('/admin/reject/:id', async (req, res) => {
   try {
-    const adminUser = req.headers['admin-username'];
-    const adminPass = req.headers['admin-password'];
-    if (adminUser !== process.env.ADMIN_USERNAME || adminPass !== process.env.ADMIN_PASSWORD) {
-      return res.status(401).json({ error: 'Unauthorized.' });
-    }
+    if (!adminAuth(req, res)) return;
 
-    const idx = users.findIndex(u => u.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'User not found.' });
+    const { data: user, error } = await supabase
+      .from('users')
+      .update({ status: 'rejected' })
+      .eq('id', req.params.id)
+      .select()
+      .single();
 
-    users[idx].status = 'rejected';
-    await saveDataToCloudinary();
+    if (error || !user) return res.status(404).json({ error: 'User not found.' });
 
-    res.json({ message: users[idx].name + ' rejected.', user: safeUser(users[idx]) });
+    res.json({ message: user.name + ' rejected.', user: formatUser(user) });
   } catch (error) {
     console.error('Reject error:', error);
     res.status(500).json({ error: 'Server error: ' + error.message });
@@ -330,20 +297,20 @@ app.patch('/admin/reject/:id', async (req, res) => {
 // ============================================================
 app.delete('/admin/user/:id', async (req, res) => {
   try {
-    const adminUser = req.headers['admin-username'];
-    const adminPass = req.headers['admin-password'];
-    if (adminUser !== process.env.ADMIN_USERNAME || adminPass !== process.env.ADMIN_PASSWORD) {
-      return res.status(401).json({ error: 'Unauthorized.' });
-    }
+    if (!adminAuth(req, res)) return;
 
-    const idx = users.findIndex(u => u.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'User not found.' });
+    const { data: user, error: fetchError } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', req.params.id)
+      .single();
 
-    const deleted = users[idx];
-    users.splice(idx, 1);
-    await saveDataToCloudinary();
+    if (fetchError || !user) return res.status(404).json({ error: 'User not found.' });
 
-    res.json({ message: deleted.name + ' deleted permanently.' });
+    const { error } = await supabase.from('users').delete().eq('id', req.params.id);
+    if (error) throw error;
+
+    res.json({ message: user.name + ' deleted permanently.' });
   } catch (error) {
     console.error('Delete user error:', error);
     res.status(500).json({ error: 'Server error: ' + error.message });
@@ -353,26 +320,16 @@ app.delete('/admin/user/:id', async (req, res) => {
 // ============================================================
 // START SERVER
 // ============================================================
-loadDataFromCloudinary().then(() => {
-  app.listen(PORT, () => {
-    console.log(`
+app.listen(PORT, () => {
+  console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
 ║    eBudget Backend Server                                 ║
 ║                                                           ║
 ║    ✅ Server running on port ${PORT}                         ║
-║    ☁️  Storage: Cloudinary                               ║
-║    💾 Auto-save: Every 10 seconds                        ║
-║    👥 Users: ${users.length}                                       ║
+║    🗄️  Storage: Supabase PostgreSQL                      ║
+║    🔒 Passwords: bcrypt hashed                           ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
-    `);
-  });
-});
-
-// Save before shutdown
-process.on('SIGTERM', async () => {
-  console.log('Shutting down, saving data...');
-  await saveDataToCloudinary();
-  process.exit(0);
+  `);
 });
