@@ -89,30 +89,6 @@
   }
   .btn-logout:hover { background: rgba(0,0,0,0.15); }
 
-  /* ===== HAMBURGER MENU ===== */
-  .hamburger {
-    display: none; flex-direction: column; justify-content: center; align-items: center;
-    gap: 5px; width: 40px; height: 40px; cursor: pointer;
-    background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.35);
-    border-radius: 10px; margin-left: auto; flex-shrink: 0;
-  }
-  .hamburger span {
-    display: block; width: 20px; height: 2px;
-    background: white; border-radius: 2px; transition: all 0.3s;
-  }
-  .hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
-  .hamburger.open span:nth-child(2) { opacity: 0; }
-  .hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
-  .mobile-menu {
-    display: none; flex-direction: column; gap: 10px;
-    background: linear-gradient(135deg, #EA580C, #C2410C);
-    padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.2);
-  }
-  .mobile-menu.open { display: flex; }
-  .mobile-menu .user-badge { justify-content: center; font-size: 0.9rem; padding: 8px 14px; }
-  .mobile-menu .month-select { width: 100%; padding: 8px 12px; font-size: 0.9rem; }
-  .mobile-menu .btn-logout { width: 100%; padding: 9px; font-size: 0.9rem; text-align: center; }
-
   .container { max-width: 940px; margin: 0 auto; padding: 24px 16px 60px; }
   .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 22px; }
   .stat-card {
@@ -232,13 +208,23 @@
   .budget-status.warn { color: #B45309; }
   .budget-status.over { color: #B91C1C; }
 
+  /* ===== SUBSCRIPTION BANNER ===== */
+  .sub-banner {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;
+    margin: 0 0 18px; padding: 10px 16px; border-radius: 12px;
+    font-size: 0.82rem; font-weight: 700;
+  }
+  .sub-banner.safe   { background: #DCFCE7; color: #15803D; border: 1.5px solid #86EFAC; }
+  .sub-banner.warn   { background: #FEF3C7; color: #92400E; border: 1.5px solid #FCD34D; }
+  .sub-banner.urgent { background: #FEE2E2; color: #B91C1C; border: 1.5px solid #FCA5A5; }
+  .sub-banner-icon { font-size: 1.1rem; }
+  .sub-banner-text { flex: 1; }
+  .sub-banner-date { font-size: 0.75rem; opacity: 0.8; }
+
   @media (max-width: 700px) {
     .stats-row { grid-template-columns: 1fr 1fr; }
     .form-grid { grid-template-columns: 1fr 1fr; }
     .header-title { font-size: 1.3rem; }
-    .header-sub { font-size: 0.65rem; }
-    .header-right { display: none; }
-    .hamburger { display: flex; }
   }
   @media (max-width: 420px) {
     .stats-row { grid-template-columns: 1fr; }
@@ -370,18 +356,15 @@
       <select class="month-select" id="selYear"></select>
       <button class="btn-logout" onclick="doLogout()">Logout</button>
     </div>
-    <button class="hamburger" id="hamburgerBtn" onclick="toggleMenu()" aria-label="Menu">
-      <span></span><span></span><span></span>
-    </button>
-  </div>
-  <div class="mobile-menu" id="mobileMenu">
-    <div class="user-badge">👤 <span id="headerUserNameMobile"></span></div>
-    <select class="month-select" id="selMonthMobile"></select>
-    <select class="month-select" id="selYearMobile"></select>
-    <button class="btn-logout" onclick="doLogout()">Logout</button>
   </div>
 
   <div class="container">
+  <!-- SUBSCRIPTION BANNER -->
+  <div class="sub-banner safe" id="subBanner" style="display:none">
+    <span class="sub-banner-icon">📅</span>
+    <span class="sub-banner-text" id="subBannerText"></span>
+    <span class="sub-banner-date" id="subBannerDate"></span>
+  </div>
   <!-- BUDGET PLANNER -->
   <div class="budget-card">
     <div class="budget-top">
@@ -488,7 +471,9 @@ const API = 'https://ebudget-tlg8.onrender.com';
 async function apiCall(path, opts = {}) {
   const { headers: h, ...rest } = opts;
   const res = await fetch(API + path, { ...rest, headers: { 'Content-Type': 'application/json', ...(h||{}) } });
-  return { ok: res.ok, data: await res.json() };
+  let data = {};
+  try { data = await res.json(); } catch(e) { data = {}; }
+  return { ok: res.ok, status: res.status, data };
 }
 function getCurrentUser() { try { return JSON.parse(sessionStorage.getItem('ebudget_current') || 'null'); } catch(e) { return null; } }
 function setCurrentUser(u) { sessionStorage.setItem('ebudget_current', JSON.stringify(u)); }
@@ -508,19 +493,20 @@ async function doLogin() {
   errEl.style.display = 'none';
   btn.disabled = true; btn.textContent = 'Signing in...';
   try {
-    const { ok, data } = await apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password: pass }) });
-    if (!ok) {
-      if (data.error === 'expired') { showPage('pageExpired'); return; }
-      errEl.style.display = 'block'; errEl.textContent = data.error || 'Invalid email or password.'; return;
-    }
+    const { ok, status, data } = await apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password: pass }) });
+    if (data.error === 'expired') { showPage('pageExpired'); return; }
+    if (data.error === 'pending')  { errEl.style.display = 'block'; errEl.textContent = 'Your account is pending admin approval.'; return; }
+    if (data.error === 'rejected') { errEl.style.display = 'block'; errEl.textContent = 'Your account has been rejected. Contact admin.'; return; }
+    if (!ok) { errEl.style.display = 'block'; errEl.textContent = data.error || 'Invalid email or password.'; return; }
     setCurrentUser(data.user);
-    _budgets = data.budgets || {};
-    entries = data.entries || [];
-    document.getElementById('headerUserName').textContent = data.user.name; document.getElementById('headerUserNameMobile').textContent = data.user.name;
-    initSelectors(); loadBudget(); render();
+    await loadUserData(data.user);
+    document.getElementById('headerUserName').textContent = data.user.name;
+    document.getElementById('headerUserNameMobile').textContent = data.user.name;
+    showSubBanner(data.user);
     showPage('pageApp');
   } catch(e) {
-    errEl.style.display = 'block'; errEl.textContent = 'Invalid email or password.';
+    console.error('Login error:', e);
+    errEl.style.display = 'block'; errEl.textContent = 'Connection error. Please try again.';
   } finally {
     btn.disabled = false; btn.textContent = 'Sign In';
   }
@@ -572,7 +558,7 @@ async function loadUserData(user) {
     entries = ok ? (data.entries || []) : [];
     _budgets = ok ? (data.budgets || {}) : {};
   } catch(e) { entries = []; _budgets = {}; }
-  document.getElementById('headerUserName').textContent = user.name; document.getElementById('headerUserNameMobile').textContent = user.name;
+  document.getElementById('headerUserName').textContent = user.name;
   initSelectors(); loadBudget(); render();
 }
 
@@ -582,28 +568,15 @@ async function saveUserData() {
   try { await apiCall('/entries/' + cur.id, { method: 'PUT', body: JSON.stringify({ entries, budgets: _budgets || {} }) }); } catch(e) {}
 }
 
-function toggleMenu() {
-  const btn = document.getElementById('hamburgerBtn');
-  const menu = document.getElementById('mobileMenu');
-  btn.classList.toggle('open');
-  menu.classList.toggle('open');
-}
-
 function initSelectors() {
   const selMonth = document.getElementById('selMonth');
   const selYear = document.getElementById('selYear');
-  const selMonthM = document.getElementById('selMonthMobile');
-  const selYearM = document.getElementById('selYearMobile');
   selMonth.innerHTML = ''; selYear.innerHTML = '';
-  selMonthM.innerHTML = ''; selYearM.innerHTML = '';
   MONTHS.forEach((m, i) => {
     const o = document.createElement('option');
     o.value = i; o.textContent = m;
     if (i === today.getMonth()) o.selected = true;
     selMonth.appendChild(o);
-    const o2 = o.cloneNode(true);
-    if (i === today.getMonth()) o2.selected = true;
-    selMonthM.appendChild(o2);
   });
   [-1, 0, 1].forEach(d => {
     const y = today.getFullYear() + d;
@@ -611,15 +584,9 @@ function initSelectors() {
     o.value = y; o.textContent = y;
     if (d === 0) o.selected = true;
     selYear.appendChild(o);
-    const o2 = o.cloneNode(true);
-    if (d === 0) o2.selected = true;
-    selYearM.appendChild(o2);
   });
-  // Keep desktop and mobile selects in sync
-  selMonth.addEventListener('change', () => { selMonthM.value = selMonth.value; loadBudget(); render(); });
-  selYear.addEventListener('change',  () => { selYearM.value  = selYear.value;  loadBudget(); render(); });
-  selMonthM.addEventListener('change', () => { selMonth.value = selMonthM.value; loadBudget(); render(); });
-  selYearM.addEventListener('change',  () => { selYear.value  = selYearM.value;  loadBudget(); render(); });
+  selMonth.addEventListener('change', () => { loadBudget(); render(); });
+  selYear.addEventListener('change', () => { loadBudget(); render(); });
   ['fName','fQty','fWeight','fPrice'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') handleAdd(); });
@@ -718,6 +685,25 @@ function normalizeWeightToKg(val, unit) {
 
 let budgetAmount = 0;
 let _budgets = {};
+
+function showSubBanner(user) {
+  const banner = document.getElementById('subBanner');
+  const bannerText = document.getElementById('subBannerText');
+  const bannerDate = document.getElementById('subBannerDate');
+  if (!user || !user.approvedAt) { banner.style.display = 'none'; return; }
+  const start = new Date(user.approvedAt);
+  const end   = new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const daysLeft = Math.ceil((end - Date.now()) / (1000 * 60 * 60 * 24));
+  const endStr = end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (daysLeft <= 0) { banner.style.display = 'none'; return; }
+  let cls = 'safe', icon = '✅';
+  if (daysLeft <= 5)  { cls = 'urgent'; icon = '🚨'; }
+  else if (daysLeft <= 10) { cls = 'warn'; icon = '⚠️'; }
+  banner.className = 'sub-banner ' + cls;
+  bannerText.textContent = icon + '  ' + daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' remaining on your monthly subscription.';
+  bannerDate.textContent = 'Expires: ' + endStr;
+  banner.style.display = 'flex';
+}
 
 function saveBudget() {
   const val = parseFloat(document.getElementById('budgetInput').value) || 0;
@@ -933,8 +919,10 @@ function generatePDF() {
       if (ok) {
         entries = data.entries || [];
         _budgets = data.budgets || {};
-        document.getElementById('headerUserName').textContent = cur.name; document.getElementById('headerUserNameMobile').textContent = cur.name;
+        document.getElementById('headerUserName').textContent = cur.name;
+        document.getElementById('headerUserNameMobile').textContent = cur.name;
         initSelectors(); loadBudget(); render();
+        showSubBanner(cur);
         showPage('pageApp'); return;
       }
     } catch(e) {}
