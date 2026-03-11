@@ -89,6 +89,30 @@
   }
   .btn-logout:hover { background: rgba(0,0,0,0.15); }
 
+  /* ===== HAMBURGER MENU ===== */
+  .hamburger {
+    display: none; flex-direction: column; justify-content: center; align-items: center;
+    gap: 5px; width: 40px; height: 40px; cursor: pointer;
+    background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.35);
+    border-radius: 10px; margin-left: auto; flex-shrink: 0;
+  }
+  .hamburger span {
+    display: block; width: 20px; height: 2px;
+    background: white; border-radius: 2px; transition: all 0.3s;
+  }
+  .hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .hamburger.open span:nth-child(2) { opacity: 0; }
+  .hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+  .mobile-menu {
+    display: none; flex-direction: column; gap: 10px;
+    background: linear-gradient(135deg, #EA580C, #C2410C);
+    padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.2);
+  }
+  .mobile-menu.open { display: flex; }
+  .mobile-menu .user-badge { justify-content: center; font-size: 0.9rem; padding: 8px 14px; }
+  .mobile-menu .month-select { width: 100%; padding: 8px 12px; font-size: 0.9rem; }
+  .mobile-menu .btn-logout { width: 100%; padding: 9px; font-size: 0.9rem; text-align: center; }
+
   .container { max-width: 940px; margin: 0 auto; padding: 24px 16px 60px; }
   .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 22px; }
   .stat-card {
@@ -212,6 +236,9 @@
     .stats-row { grid-template-columns: 1fr 1fr; }
     .form-grid { grid-template-columns: 1fr 1fr; }
     .header-title { font-size: 1.3rem; }
+    .header-sub { font-size: 0.65rem; }
+    .header-right { display: none; }
+    .hamburger { display: flex; }
   }
   @media (max-width: 420px) {
     .stats-row { grid-template-columns: 1fr; }
@@ -343,6 +370,15 @@
       <select class="month-select" id="selYear"></select>
       <button class="btn-logout" onclick="doLogout()">Logout</button>
     </div>
+    <button class="hamburger" id="hamburgerBtn" onclick="toggleMenu()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+  <div class="mobile-menu" id="mobileMenu">
+    <div class="user-badge">👤 <span id="headerUserNameMobile"></span></div>
+    <select class="month-select" id="selMonthMobile"></select>
+    <select class="month-select" id="selYearMobile"></select>
+    <button class="btn-logout" onclick="doLogout()">Logout</button>
   </div>
 
   <div class="container">
@@ -480,7 +516,7 @@ async function doLogin() {
     setCurrentUser(data.user);
     _budgets = data.budgets || {};
     entries = data.entries || [];
-    document.getElementById('headerUserName').textContent = data.user.name;
+    document.getElementById('headerUserName').textContent = data.user.name; document.getElementById('headerUserNameMobile').textContent = data.user.name;
     initSelectors(); loadBudget(); render();
     showPage('pageApp');
   } catch(e) {
@@ -536,7 +572,7 @@ async function loadUserData(user) {
     entries = ok ? (data.entries || []) : [];
     _budgets = ok ? (data.budgets || {}) : {};
   } catch(e) { entries = []; _budgets = {}; }
-  document.getElementById('headerUserName').textContent = user.name;
+  document.getElementById('headerUserName').textContent = user.name; document.getElementById('headerUserNameMobile').textContent = user.name;
   initSelectors(); loadBudget(); render();
 }
 
@@ -546,15 +582,28 @@ async function saveUserData() {
   try { await apiCall('/entries/' + cur.id, { method: 'PUT', body: JSON.stringify({ entries, budgets: _budgets || {} }) }); } catch(e) {}
 }
 
+function toggleMenu() {
+  const btn = document.getElementById('hamburgerBtn');
+  const menu = document.getElementById('mobileMenu');
+  btn.classList.toggle('open');
+  menu.classList.toggle('open');
+}
+
 function initSelectors() {
   const selMonth = document.getElementById('selMonth');
   const selYear = document.getElementById('selYear');
+  const selMonthM = document.getElementById('selMonthMobile');
+  const selYearM = document.getElementById('selYearMobile');
   selMonth.innerHTML = ''; selYear.innerHTML = '';
+  selMonthM.innerHTML = ''; selYearM.innerHTML = '';
   MONTHS.forEach((m, i) => {
     const o = document.createElement('option');
     o.value = i; o.textContent = m;
     if (i === today.getMonth()) o.selected = true;
     selMonth.appendChild(o);
+    const o2 = o.cloneNode(true);
+    if (i === today.getMonth()) o2.selected = true;
+    selMonthM.appendChild(o2);
   });
   [-1, 0, 1].forEach(d => {
     const y = today.getFullYear() + d;
@@ -562,9 +611,15 @@ function initSelectors() {
     o.value = y; o.textContent = y;
     if (d === 0) o.selected = true;
     selYear.appendChild(o);
+    const o2 = o.cloneNode(true);
+    if (d === 0) o2.selected = true;
+    selYearM.appendChild(o2);
   });
-  selMonth.addEventListener('change', () => { loadBudget(); render(); });
-  selYear.addEventListener('change', () => { loadBudget(); render(); });
+  // Keep desktop and mobile selects in sync
+  selMonth.addEventListener('change', () => { selMonthM.value = selMonth.value; loadBudget(); render(); });
+  selYear.addEventListener('change',  () => { selYearM.value  = selYear.value;  loadBudget(); render(); });
+  selMonthM.addEventListener('change', () => { selMonth.value = selMonthM.value; loadBudget(); render(); });
+  selYearM.addEventListener('change',  () => { selYear.value  = selYearM.value;  loadBudget(); render(); });
   ['fName','fQty','fWeight','fPrice'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') handleAdd(); });
@@ -878,7 +933,7 @@ function generatePDF() {
       if (ok) {
         entries = data.entries || [];
         _budgets = data.budgets || {};
-        document.getElementById('headerUserName').textContent = cur.name;
+        document.getElementById('headerUserName').textContent = cur.name; document.getElementById('headerUserNameMobile').textContent = cur.name;
         initSelectors(); loadBudget(); render();
         showPage('pageApp'); return;
       }
